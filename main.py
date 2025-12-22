@@ -3,50 +3,30 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from dotenv import load_dotenv, find_dotenv
 from database import Base, engine
-from routes.vector_store import vector_store_router
-from routes.chat import chat_router
-from routes.lead import lead_generator_router
-from routes.support_ticket import support_ticket_router
-from routes.settings import settings_router
-from routes.ws import ws_router
-from routes.dashboard import dashboard_router
-from routes.onboarding import onboarding_router
-from routes.routes import router as document_qa_router
+from routes.routes import router
 from fastapi.exception_handlers import RequestValidationError
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
 from fastapi import Request
 from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
-from utils import logger
+from utils import logger, config
 
 
 app = FastAPI(
-    title="Mini End-to-End AI Microservice",
-    description="AI-powered document QA service with RAG capabilities. Upload documents, extract embeddings, and query using LLMs.",
-    version="1.0.0",
+    title=config.APP_NAME,
+    description=config.APP_DESCRIPTION,
+    version=config.APP_VERSION,
 )
 
 
-# Include document QA routes (assignment requirement)
-app.include_router(document_qa_router)
-
-# Include existing routes
-app.include_router(vector_store_router)
-app.include_router(chat_router)
-app.include_router(lead_generator_router)
-app.include_router(support_ticket_router)
-app.include_router(settings_router)
-app.include_router(ws_router)
-app.include_router(dashboard_router)
-app.include_router(onboarding_router, prefix="/v1")
-
+app.include_router(router)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=config.CORS_ORIGINS,
+    allow_credentials=config.CORS_ALLOW_CREDENTIALS,
+    allow_methods=config.CORS_ALLOW_METHODS,
+    allow_headers=config.CORS_ALLOW_HEADERS,
 )
 
 

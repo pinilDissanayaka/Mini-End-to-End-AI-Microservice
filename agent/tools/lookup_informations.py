@@ -1,24 +1,22 @@
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
-from service import get_cached_vector_store
+from utils import Chroma_VectorStore
 
 
 @tool
 async def lookup_informations(query: str, config:RunnableConfig) -> str:
-    """Consult the company FAQ, packages, pricings to answer the user's query."""
     """
-    Tool to lookup information from the vector store of the given agent_name.
-
-    Args:
-        query (str): The query to search for in the vector store.
-        config (RunnableConfig): The configuration for the tool.
-
-    Returns:
-        str: The content of the pages that match the query, separated by two newlines.
-    """
-    agent_name = config.get("configurable", {}).get("agent_name")
+    This tool takes in a query and a configuration that contains a reference to a Chroma VectorStore.
+    It uses the vector store to query the documents and then returns the relevant information.
     
-    vector_store = await get_cached_vector_store(agent_name=agent_name)
+    If the vector store is not provided, it will return "No information available for the query."
+    
+    If the query does not return any results, it will return "No relevant information found for the query."
+    
+    Otherwise, it will return the page content of the relevant documents, separated by two newline characters.
+    """
+    vector_store: Chroma_VectorStore = config.get("configurable").get("vector_store")
+    
     
     retriever = await vector_store.query_vector_store() if vector_store else None
     

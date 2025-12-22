@@ -3,7 +3,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.messages import ToolMessage
 from langchain_core.runnables import RunnableLambda
 from langgraph.prebuilt import ToolNode
-from utils import logger, llm
+from utils import logger, llm, Chroma_VectorStore
 from agent.state import State
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph, START
@@ -98,6 +98,19 @@ class Assistant:
 async def build_graph(
     agent_prompt: str
 ):
+    """
+    Build the state graph for the agent.
+
+    This function builds the state graph for the agent. The state graph is a
+    directed graph where each node is a state and each edge is a conditional
+    transition between states. The state graph is built using the agent prompt
+    and the tools provided.
+
+    :param agent_prompt: the prompt of the agent
+    :type agent_prompt: str
+    :return: the state graph for the agent
+    :rtype: StateGraph
+    """
     agent_prompt = ChatPromptTemplate.from_messages(
     [
         (
@@ -112,9 +125,7 @@ async def build_graph(
         lookup_informations,
     ]
 
-        
-
-
+    
     agent_runnable = agent_prompt | llm.bind_tools(tools)
 
 
@@ -136,12 +147,18 @@ async def build_graph(
     return noopy_agent_graph
 
 
-async def get_chat_response(graph, question:str, thread_id:str="1", agent_name:str="default_agent"):
+async def get_chat_response(graph, question:str, thread_id:str, vector_store: Chroma_VectorStore):
+    """
+    This function takes in a graph, a question, a thread id, and a Chroma VectorStore.
+    It then uses the graph to generate a response to the question.
+    It will return the response as a string.
+    If an error occurs while generating the response, it will log the error and return an empty string.
+    """
     try:
         config = {
             "configurable": {
                 "thread_id": thread_id,
-                "agent_name": agent_name
+                "vector_store": vector_store,
             }
         }
         

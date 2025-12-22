@@ -19,21 +19,17 @@ class Document(Base):
     file_size: Mapped[int] = mapped_column(Integer, nullable=True)
     
     
-class QueryLog(Base):
-    """Model for logging queries and their latencies"""
-    __tablename__ = "query_logs"
+class ChatMessage(Base):
+    """Model for logging chat messages"""
+    __tablename__ = "chat_messages"
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    query: Mapped[str] = mapped_column(Text, nullable=False)
-    response: Mapped[str] = mapped_column(Text, nullable=True)
-    latency_ms: Mapped[float] = mapped_column(Float, nullable=False)
+    thread_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    answer: Mapped[str] = mapped_column(Text, nullable=False)
+    latency_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     timestamp: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
-    retrieved_docs: Mapped[int] = mapped_column(Integer, default=0)
     
-    
-class Conversation(Base):
-    pass
 
-    __tablename__ = "conversations"
     
     

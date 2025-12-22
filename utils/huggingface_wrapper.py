@@ -1,27 +1,34 @@
 from langchain_huggingface import ChatHuggingFace, HuggingFacePipeline, HuggingFaceEmbeddings
+from utils.config import config
 
 
-def load_llm_model(model_name: str) -> ChatHuggingFace:
-
+def load_llm_model(model_name: str = None) -> ChatHuggingFace:
+    """Load the LLM model from HuggingFace"""
+    if model_name is None:
+        model_name = config.CHAT_MODEL
+    
     llm = HuggingFacePipeline.from_model_id(
-            model_id="HuggingFaceH4/zephyr-7b-beta",
-            task="text-generation",
-            pipeline_kwargs=dict(
-                max_new_tokens=512,
-                do_sample=False,
-                repetition_penalty=1.03,
-            ),
-        )
+        model_id=model_name,
+        task="text-generation",
+        pipeline_kwargs=dict(
+            max_new_tokens=config.LLM_MAX_NEW_TOKENS,
+            do_sample=False,
+            repetition_penalty=config.LLM_REPETITION_PENALTY,
+        ),
+    )
 
     chat_model = ChatHuggingFace(llm=llm)
-    
     
     return chat_model
 
 
-def load_embedding_model(model_name: str):
-    model_kwargs = {"device": "cpu"}
-    encode_kwargs = {"normalize_embeddings": False}
+def load_embedding_model(model_name: str = None):
+    """Load the embedding model from HuggingFace"""
+    if model_name is None:
+        model_name = config.EMBEDDING_MODEL
+        
+    model_kwargs = {"device": config.EMBEDDING_DEVICE}
+    encode_kwargs = {"normalize_embeddings": config.EMBEDDING_NORMALIZE}
     
     embedding_model = HuggingFaceEmbeddings(
         model_name=model_name,
@@ -32,5 +39,6 @@ def load_embedding_model(model_name: str):
     return embedding_model
 
 
-llm = load_llm_model("HuggingFaceH4/zephyr-7b-beta")
-embedding_model = load_embedding_model("sentence-transformers/all-MiniLM-L6-v2")
+# Global instances
+llm = load_llm_model()
+embedding_model = load_embedding_model()

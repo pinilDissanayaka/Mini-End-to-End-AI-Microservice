@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from dotenv import load_dotenv, find_dotenv
 from typing import AsyncGenerator
+from utils.config import config
 
 
 load_dotenv(find_dotenv())
@@ -10,7 +11,12 @@ load_dotenv(find_dotenv())
 Base = declarative_base()
 
 
-engine = create_async_engine(os.getenv("DATABASE_URL"), echo=True, future=True, pool_pre_ping=True)
+engine = create_async_engine(
+    config.DATABASE_URL, 
+    echo=config.DATABASE_ECHO, 
+    future=True, 
+    pool_pre_ping=True
+)
 
 
 SessionLocal = sessionmaker(

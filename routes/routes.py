@@ -1,48 +1,55 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks
+from service import get_document_service
 from sqlalchemy.ext.asyncio import AsyncSession
 import os
 import shutil
 from pathlib import Path
-
+import time
 from database import get_db
 from schema import (
     UploadResponse, 
     ListDocumentsResponse, 
     DocumentInfo,
-    QueryRequest, 
-    QueryResponse
+    ChatRequest,    
+    ChatResponse
 )
 from service.document_service import DocumentService
-from utils import logger, Loader, Chroma_VectorStore
+from service.chat_service import ChatService, get_chat_service
+from utils import logger, Loader, Chroma_VectorStore, get_chroma_vector_store, config
+from agent import get_chat_response, build_graph
 
 
-router = APIRouter(prefix="/api/v1", tags=["documents"])
+router = APIRouter(prefix="/api/v1")
 
-UPLOAD_DIR = Path("uploads")
+# Use config for upload directory
+UPLOAD_DIR = Path(config.UPLOAD_DIR)
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-ALLOWED_EXTENSIONS = {".pdf", ".txt", ".json", ".md", ".docx", ".pptx"}
+ALLOWED_EXTENSIONS = config.ALLOWED_EXTENSIONS
 
-
-def get_document_service():
-    """Dependency to get document service instance"""
-    return DocumentService()
 
 
 @router.post("/upload", response_model=UploadResponse)
 async def upload_document(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    doc_service: DocumentService = Depends(get_document_service),    
+    doc_service: DocumentService = Depends(get_document_service),
+    vector_store: Chroma_VectorStore = Depends(get_chroma_vector_store),    
 ):
     """
-    Upload a document (PDF, TXT, CSV, JSON, MD, DOCX, PPTX) for processing.
-    
-    The document will be:
-    1. Saved to disk
-    2. Metadata stored in database
-    3. Text extracted and embedded
-    4. Stored in vector database for retrieval
+    Upload a document to the server.
+
+    Args:
+        file (UploadFile): The document to upload.
+        db (AsyncSession): The database session to use.
+        doc_service (DocumentService): The document service to use.
+        vector_store (Chroma_VectorStore): The vector store to use.
+
+    Returns:
+        UploadResponse: The response containing the filename, file type, and file size.
+
+    Raises:
+        HTTPException: If the file type is not supported, or if the upload fails.
     """
     try:
         file_ext = Path(file.filename).suffix.lower()
@@ -69,7 +76,7 @@ async def upload_document(
         try:
             loader = Loader(file_paths=[str(file_path)])
             text_content = await loader.load()
-            vector_store = Chroma_VectorStore()
+
             await vector_store.build_vector_store(
                 text=text_content
             )
@@ -82,8 +89,6 @@ async def upload_document(
             file_size=file_size,
         )
         
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
@@ -125,45 +130,61 @@ async def list_documents(
         raise HTTPException(status_code=500, detail=f"Failed to list documents: {str(e)}")
 
 
-@router.post("/query", response_model=QueryResponse)
-async def query_documents(
-    request: QueryRequest,
+
+
+@router.post("/query", response_model=ChatResponse)
+async def chat(
+    request: ChatRequest, 
+    background_tasks: BackgroundTasks,
+    graph=Depends(build_graph), 
+    vector_store: Chroma_VectorStore = Depends(get_chroma_vector_store),
     db: AsyncSession = Depends(get_db),
-    doc_service: DocumentService = Depends(get_document_service)
+    chat_service: ChatService = Depends(get_chat_service)
 ):
     """
-    Query the document knowledge base with a question.
-    
-    Uses RAG (Retrieval-Augmented Generation) to:
-    1. Retrieve relevant document chunks from vector store
-    2. Generate answer using LLM with retrieved context
-    3. Log query and latency
-    
-    Parameters:
-    - question: The question to ask
-    - top_k: Number of relevant chunks to retrieve (default: 3)
-    
+    Process a chat request using the provided graph and vector store.
+
+    Args:
+    - request (ChatRequest): The chat request containing the question and thread id.
+    - background_tasks (BackgroundTasks): The background tasks to add the logging task to.
+    - graph (StateGraph): The graph to use for the chat.
+    - vector_store (Chroma_VectorStore): The vector store to use for the chat.
+    - db (AsyncSession): The database session to use for logging the chat message.
+    - chat_service (ChatService): The chat service to use for logging the chat message.
+
     Returns:
-    - Generated answer
-    - Query latency in milliseconds
-    - Number of retrieved documents
-    - Sources of information
+    - ChatResponse: The response containing the answer to the chat request.
+
+    Raises:
+    - HTTPException: If an internal error occurred while processing the request.
     """
     try:
-        result = await doc_service.query_documents(
-            db=db,
+        start_time = time.time()
+        
+        response = await get_chat_response(
+            graph=graph,
             question=request.question,
-            top_k=request.top_k
+            thread_id=request.thread_id,
+            vector_store=vector_store
         )
         
-        return QueryResponse(
+        latency_ms = (time.time() - start_time) * 1000
+        
+        background_tasks.add_task(
+            chat_service.log_chat_message,
+            db=db,
+            thread_id=request.thread_id,
             question=request.question,
-            answer=result["answer"],
-            latency_ms=result["latency_ms"],
-            retrieved_docs=result["retrieved_docs"],
-            sources=result["sources"]
+            answer=response,
+            latency_ms=latency_ms
         )
+        
+        return ChatResponse( 
+            response=response,
+        )
+        
         
     except Exception as e:
-        logger.error(f"Query error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
+        logger.error(f"Chat error: {str(e)}")
+        raise HTTPException(status_code=500, detail="An internal error occurred while processing the request.")
+  
